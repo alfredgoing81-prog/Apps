@@ -28,6 +28,12 @@ Bookmarks, highlights, reading-plan progress, and prayer-journal entries are sto
 
 The King James Version text is public domain, from [aruljohn/Bible-kjv](https://github.com/aruljohn/Bible-kjv).
 
+## Bigfoot Sightings
+
+A shared map of Bigfoot reports: [https://alfredgoing81-prog.github.io/Apps/bigfoot/](https://alfredgoing81-prog.github.io/Apps/bigfoot/)
+
+Phone setup for that map is in [bigfoot/SETUP.md](bigfoot/SETUP.md). The Bible app above is unchanged.
+
 ## Screenshots
 
 ![Home screen with the daily verse](screenshots/screenshot-home.png)
