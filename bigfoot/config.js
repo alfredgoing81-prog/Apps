@@ -5,6 +5,6 @@
 // (a long key starting with eyJ) or "publishable" (starting with sb_publishable_).
 // Never paste a service_role key or a secret key (sb_secret_). Those are private.
 window.BIGFOOT_CONFIG = {
-  SUPABASE_URL: "",
-  SUPABASE_ANON_KEY: ""
+  SUPABASE_URL: "https://ersqskpininidrcpbcyt.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_z_i10YlCPB3ZFvMfSHmDBQ_MKU8PkAu"
 };

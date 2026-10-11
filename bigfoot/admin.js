@@ -7,6 +7,7 @@ import {
   formatCoord,
   formatWhen,
   friendlyError,
+  isSchemaNotReady,
   kindLabel,
   osmLink,
   photoObjectPath,
@@ -38,9 +39,6 @@ async function boot() {
   if (hash.get("error")) {
     showSignNote("That sign-in link did not work. Request a new one.");
   }
-  const { data } = await client.auth.getSession();
-  renderSession(data.session);
-  client.auth.onAuthStateChange((_event, session) => renderSession(session));
   document.getElementById("sign-in").addEventListener("submit", sendLink);
   document.getElementById("sign-out").addEventListener("click", async () => {
     await client.auth.signOut();
@@ -49,6 +47,14 @@ async function boot() {
   document.getElementById("tab-pending").addEventListener("click", () => setMode("pending"));
   document.getElementById("tab-approved").addEventListener("click", () => setMode("approved"));
   document.getElementById("queue-list").addEventListener("click", onQueueClick);
+  try {
+    const { data, error } = await client.auth.getSession();
+    if (error) showSignNote(friendlyError(error));
+    renderSession(data?.session || null);
+    client.auth.onAuthStateChange((_event, session) => renderSession(session));
+  } catch (error) {
+    showSignNote(friendlyError(error));
+  }
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
@@ -110,10 +116,22 @@ async function loadQueue(session) {
   const note = document.getElementById("admin-note");
   const queueEl = document.getElementById("queue");
   const email = String(session.user.email || "").toLowerCase();
-  const admin = await client.from("admins").select("email").eq("email", email).maybeSingle();
+  let admin;
+  try {
+    admin = await client.from("admins").select("email").eq("email", email).maybeSingle();
+  } catch (error) {
+    note.hidden = false;
+    note.textContent = isSchemaNotReady(error)
+      ? "The database isn't ready yet. Run the setup SQL in Supabase, then sign in again."
+      : "Couldn't check the admin list. Check your connection and refresh.";
+    queueEl.hidden = true;
+    return;
+  }
   if (admin.error) {
     note.hidden = false;
-    note.textContent = "Couldn't check the admin list. Check your connection and refresh.";
+    note.textContent = isSchemaNotReady(admin.error)
+      ? "The database isn't ready yet. Run the setup SQL in Supabase, then sign in again."
+      : "Couldn't check the admin list. Check your connection and refresh.";
     queueEl.hidden = true;
     return;
   }
@@ -126,18 +144,27 @@ async function loadQueue(session) {
   note.hidden = true;
   queueEl.hidden = false;
   document.getElementById("queue-status").textContent = "Loading reports…";
-  const [pending, approved] = await Promise.all([
-    client.from("sightings").select(SIGHTING_COLUMNS).eq("status", "pending").order("created_at", { ascending: false }).limit(100),
-    client.from("sightings").select(SIGHTING_COLUMNS).eq("status", "approved").order("seen_at", { ascending: false }).limit(50)
-  ]);
-  if (pending.error || approved.error) {
-    document.getElementById("queue-status").textContent = "Couldn't load reports. Refresh the page and try again.";
-    return;
+  try {
+    const [pending, approved] = await Promise.all([
+      client.from("sightings").select(SIGHTING_COLUMNS).eq("status", "pending").order("created_at", { ascending: false }).limit(100),
+      client.from("sightings").select(SIGHTING_COLUMNS).eq("status", "approved").order("seen_at", { ascending: false }).limit(50)
+    ]);
+    const failed = pending.error || approved.error;
+    if (failed) {
+      document.getElementById("queue-status").textContent = isSchemaNotReady(failed)
+        ? "The database isn't ready yet. Run the setup SQL in Supabase, then refresh this page."
+        : "Couldn't load reports. Refresh the page and try again.";
+      return;
+    }
+    queue = { pending: pending.data || [], approved: approved.data || [] };
+    document.getElementById("queue-status").textContent = flash;
+    flash = "";
+    renderQueue();
+  } catch (error) {
+    document.getElementById("queue-status").textContent = isSchemaNotReady(error)
+      ? "The database isn't ready yet. Run the setup SQL in Supabase, then refresh this page."
+      : "Couldn't load reports. Refresh the page and try again.";
   }
-  queue = { pending: pending.data || [], approved: approved.data || [] };
-  document.getElementById("queue-status").textContent = flash;
-  flash = "";
-  renderQueue();
 }
 
 function setMode(next) {

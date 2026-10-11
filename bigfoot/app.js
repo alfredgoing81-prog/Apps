@@ -16,6 +16,7 @@ import {
   formatCoord,
   formatWhen,
   friendlyError,
+  sightingsStatusMessage,
   geolocationMessage,
   kindLabel,
   nowLocalInput,
@@ -172,18 +173,28 @@ function setupList() {
 }
 
 async function loadSightings(client) {
-  const { data, error } = await client
-    .from("sightings")
-    .select(SIGHTING_COLUMNS)
-    .eq("status", "approved")
-    .order("seen_at", { ascending: false })
-    .limit(500);
-  if (error) {
-    state.loadError = "Couldn't load sightings. Check your connection.";
-  } else {
+  try {
+    const { data, error } = await client
+      .from("sightings")
+      .select(SIGHTING_COLUMNS)
+      .eq("status", "approved")
+      .order("seen_at", { ascending: false })
+      .limit(500);
+    if (error) throw error;
     state.sightings = data || [];
     state.loadError = "";
     drawPins();
+  } catch (error) {
+    state.sightings = [];
+    state.loadError = sightingsStatusMessage(error);
+  }
+  const banner = document.getElementById("banner");
+  if (state.loadError) {
+    banner.hidden = false;
+    banner.textContent = state.loadError;
+  } else if (!connectionProblem(window.BIGFOOT_CONFIG || {})) {
+    banner.hidden = true;
+    banner.textContent = "";
   }
   renderList();
 }

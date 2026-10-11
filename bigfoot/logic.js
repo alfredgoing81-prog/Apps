@@ -483,8 +483,28 @@ export function excerpt(text, max = 160) {
   return `${value.slice(0, max - 1).trimEnd()}…`;
 }
 
+export function isSchemaNotReady(error) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || error || "");
+  return code === "PGRST205" || /schema cache|could not find the table|does not exist/i.test(message);
+}
+
+export function sightingsStatusMessage(error) {
+  if (isSchemaNotReady(error)) {
+    return "The database isn't ready yet. You can still look at the map. Reports will show here after the setup SQL is run in Supabase.";
+  }
+  const message = String(error?.message || error || "");
+  if (/failed to fetch|networkerror|network/i.test(message)) {
+    return "Couldn't load sightings. Check your connection.";
+  }
+  return "Couldn't load sightings. Check your connection and try again.";
+}
+
 export function friendlyError(error) {
   const message = String(error?.message || error || "");
+  if (isSchemaNotReady(error)) {
+    return "The database isn't ready yet. This can't be saved until the setup SQL is run in Supabase.";
+  }
   if (/too many reports/i.test(message)) {
     return "Too many reports were sent just now. Please wait a few minutes and try again.";
   }
