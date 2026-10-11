@@ -1,5 +1,6 @@
 // App shell only. Map tiles and Supabase stay on the network.
-const CACHE = "bigfoot-shell-v1";
+// v2 drops the earlier shell cache, which included an empty config.js.
+const CACHE = "bigfoot-shell-v2";
 const FILES = [
   "./",
   "./index.html",

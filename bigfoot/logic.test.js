@@ -20,6 +20,8 @@ import {
   formatCoord,
   formatWhen,
   friendlyError,
+  isSchemaNotReady,
+  sightingsStatusMessage,
   isConfigured,
   photoObjectPath,
   rateLimitMessage,
@@ -313,6 +315,14 @@ test("dates and errors are readable", () => {
   assert.match(when, /Oct 11, 2026/);
   assert.match(when, /6:05/);
   assert.equal(formatCoord(70.1319, -143.623), "70.132, -143.623");
+  const missingTable = {
+    code: "PGRST205",
+    message: "Could not find the table 'public.sightings' in the schema cache"
+  };
+  assert.equal(isSchemaNotReady(missingTable), true);
+  assert.match(sightingsStatusMessage(missingTable), /database isn't ready yet/i);
+  assert.match(sightingsStatusMessage(missingTable), /look at the map/i);
+  assert.match(friendlyError(missingTable), /setup SQL/i);
   assert.match(friendlyError({ message: "Too many reports right now." }), /wait a few minutes/i);
   assert.match(friendlyError({ message: "Failed to fetch" }), /connection/i);
   assert.equal(validEmail("alfred@example.com"), true);
