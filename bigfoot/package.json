@@ -1,0 +1,8 @@
+{
+  "name": "bigfoot-sightings",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test logic.test.js"
+  }
+}
