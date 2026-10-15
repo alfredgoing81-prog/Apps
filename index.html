@@ -65,6 +65,7 @@ nav.tabs button.on{color:var(--accent2)}
 .vs.hl-yellow{background:var(--hl-yellow)}.vs.hl-green{background:var(--hl-green)}.vs.hl-blue{background:var(--hl-blue)}.vs.hl-pink{background:var(--hl-pink)}
 .vs.bm::after{content:"";position:absolute;right:2px;top:6px;width:8px;height:14px;background:var(--accent);clip-path:polygon(0 0,100% 0,100% 100%,50% 75%,0 100%)}
 .vs.note sup{text-decoration:underline}
+.chapter-pad{height:calc(100vh - 150px)}
 .vs.flash{animation:flash 1.6s ease-out}
 @keyframes flash{0%{box-shadow:inset 0 0 0 2px var(--accent)}100%{box-shadow:inset 0 0 0 2px transparent}}
 .rnav{display:flex;gap:10px;margin:18px 0 6px}.rnav button{flex:1}
@@ -103,6 +104,14 @@ dialog h3{margin:0 0 12px;font-size:19px}
 .sheet .vtext{font-family:Georgia,serif;line-height:1.5;margin-bottom:6px}
 .colors{display:flex;gap:10px;margin-top:6px}
 .colors button{flex:1;min-height:48px;padding:0}
+.cont-ref{font-size:22px;font-weight:700;line-height:1.3}
+.peekbar{display:none;position:sticky;top:64px;z-index:4;background:var(--card);border:1px solid var(--accent);border-radius:var(--r);padding:10px 12px;margin:0 0 12px;gap:8px;align-items:center;box-shadow:0 8px 18px rgba(0,0,0,.18)}
+.peekbar.on{display:flex;flex-wrap:wrap}
+.peekbar .small{flex:1 1 200px;margin:0;color:var(--text);line-height:1.4}
+.peekbar button{flex:1 1 180px}
+.devotional,.prayer-text{font-size:17px;line-height:1.6}
+.devotional p,.prayer-text p{margin:0 0 12px}
+.prayer-text{font-family:Georgia,"Times New Roman",serif;font-size:20px;line-height:1.65}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--card2);color:var(--text);padding:12px 18px;border-radius:12px;border:1px solid var(--line);opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw;text-align:center;z-index:50}
 .toast.show{opacity:1}
 #loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:100;text-align:center;padding:20px}
@@ -117,24 +126,38 @@ dialog h3{margin:0 0 12px;font-size:19px}
   <!-- HOME -->
   <section class="view on" id="v-home">
     <header class="top"><div class="logo">✝</div><h1>Bible</h1><span class="small">KJV</span></header>
+    <div class="card" id="continueCard">
+      <h2>Continue reading</h2>
+      <div class="cont-ref" id="contRef"></div>
+      <div class="small" id="contHint">Your place is saved on this device.</div>
+      <button class="primary" id="contBtn" data-go="read" style="width:100%;margin-top:12px">Continue reading</button>
+    </div>
     <div class="card">
       <h2>Verse of the day</h2>
       <div class="small" id="dvDate"></div>
       <div class="dv-text serif" id="dvText"></div>
       <div class="dv-ref" id="dvRef"></div>
       <div class="btns grow">
-        <button id="dvCopy">Copy</button><button id="dvShare">Share</button><button class="primary" id="dvOpen">Read</button>
+        <button id="dvCopy">Copy</button><button id="dvShare">Share</button>
       </div>
+      <button class="primary" id="dvOpen" style="width:100%;margin-top:10px">Read in context</button>
     </div>
     <div class="card">
-      <h2>Continue reading</h2>
-      <div class="row"><div class="grow"><div style="font-size:19px;font-weight:700" id="contRef"></div><div class="small">Pick up where you left off</div></div><button class="primary" id="contBtn">Open</button></div>
+      <h2>Daily study</h2>
+      <div class="dv-ref" id="homeStudyRef"></div>
+      <div class="small" id="homeStudyTease" style="margin-top:6px"></div>
+      <button class="primary" data-go="study" style="width:100%;margin-top:12px">Open daily study</button>
+    </div>
+    <div class="card">
+      <h2>Daily prayer</h2>
+      <div class="small" id="homePrayerTease"></div>
+      <button class="primary" data-go="prayer" style="width:100%;margin-top:12px">Open daily prayer</button>
     </div>
     <div class="card" id="homePlan"></div>
     <div class="card">
       <h2>Quick links</h2>
       <div class="btns grow" style="margin-top:0">
-        <button data-go="saved">Bookmarks</button><button id="homeNewPrayer">New prayer</button><button data-go="settings">Settings</button>
+        <button data-go="study">Daily study</button><button data-go="prayer">Daily prayer</button><button data-go="saved">Bookmarks</button><button id="homeNewPrayer">Write a prayer</button><button data-go="settings">Settings</button>
       </div>
     </div>
   </section>
@@ -148,9 +171,53 @@ dialog h3{margin:0 0 12px;font-size:19px}
       <button class="icon" id="fontDown" aria-label="Smaller text">A−</button>
       <button class="icon" id="fontUp" aria-label="Larger text">A+</button>
     </div>
+    <div id="peekBar" class="peekbar">
+      <div class="small" id="peekMsg"></div>
+      <button class="primary" data-go="read">Continue reading</button>
+    </div>
     <div class="chapter" id="chapter"></div>
     <div class="rnav"><button id="prevCh2">‹ Previous</button><button id="nextCh2">Next ›</button></div>
     <p class="small" style="text-align:center">Tap a verse to bookmark, highlight, copy, share or add a note.</p>
+    <div class="chapter-pad" aria-hidden="true"></div>
+  </section>
+
+  <!-- DAILY STUDY -->
+  <section class="view" id="v-study">
+    <header class="top"><button class="icon" data-go="home" aria-label="Home">‹</button><h1>Daily study</h1></header>
+    <div class="card">
+      <div class="small" id="stDate"></div>
+      <div class="dv-ref" id="stRef" style="margin-top:6px"></div>
+      <div class="dv-text serif" id="stText"></div>
+      <h2>For today</h2>
+      <div class="devotional" id="stBody"></div>
+      <button class="primary" id="stContext" style="width:100%">Read in context</button>
+      <div class="btns grow">
+        <button id="stPrayer">Today's prayer</button>
+        <button id="stCopy">Copy</button>
+        <button id="stShare">Share</button>
+      </div>
+      <p class="small" style="margin:12px 0 0">Opening the chapter does not move your saved place. Continue reading brings you back.</p>
+    </div>
+  </section>
+
+  <!-- DAILY PRAYER -->
+  <section class="view" id="v-prayer">
+    <header class="top"><button class="icon" data-go="home" aria-label="Home">‹</button><h1>Daily prayer</h1></header>
+    <div class="card">
+      <div class="small" id="prDate"></div>
+      <div class="small" style="margin-top:8px">With today's verse</div>
+      <div class="dv-ref" id="prRef"></div>
+      <div class="serif" id="prVerse" style="margin:8px 0 4px;line-height:1.5"></div>
+      <h2>Prayer</h2>
+      <div class="prayer-text" id="prBody"></div>
+      <button class="primary" id="prContext" style="width:100%">Read in context</button>
+      <div class="btns grow">
+        <button id="prStudy">Today's study</button>
+        <button id="prCopy">Copy</button>
+        <button id="prShare">Share</button>
+      </div>
+      <p class="small" style="margin:12px 0 0">Opening the chapter does not move your saved place. Continue reading brings you back.</p>
+    </div>
   </section>
 
   <!-- SEARCH -->
@@ -199,7 +266,7 @@ dialog h3{margin:0 0 12px;font-size:19px}
     </div>
     <div class="card">
       <h2>Backup &amp; move between devices</h2>
-      <p class="small" style="margin-top:0">Your bookmarks, highlights, journal and plan progress are saved only on this device. Export a backup file, then import it on your phone or PC.</p>
+      <p class="small" style="margin-top:0">Your bookmarks, highlights, journal and plan progress are saved only on this device. Export a backup file, then import it on your phone or PC. Your reading place is saved separately on this device. The daily verse, study, prayer, plan, and journal do not move it.</p>
       <div class="btns grow"><button class="primary" id="exportBtn">Export backup</button><button id="importBtn">Import backup</button></div>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <div class="small" id="dataSummary" style="margin-top:10px"></div>
@@ -271,6 +338,7 @@ dialog h3{margin:0 0 12px;font-size:19px}
 
 <div class="toast" id="toast"></div>
 <script src="core.js"></script>
+<script src="daily.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

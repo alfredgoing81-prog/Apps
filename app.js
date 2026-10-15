@@ -2,19 +2,68 @@
 (function () {
   'use strict';
   const C = window.BibleCore;
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
   const KEY = 'kjv-bible-app:v1';
+  // Reading place is its own key so other pages cannot move it.
+  const READ_KEY = 'kjv-bible-app:reading-place';
   const $ = s => document.querySelector(s);
   const $$ = s => Array.from(document.querySelectorAll(s));
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   let BOOKS = [], NAMES = [], IDX = null;
   let D = load();
-  let cur = { b: D.last.b, c: D.last.c };
+  let reading = loadReading();
+  let cur = { b: reading.b, c: reading.c };
   let view = 'home';
+  let peek = null;
+  let ignoreScroll = false;
+  let saveTimer = 0;
+
+  const PEEK_FROM = {
+    verse: 'the verse of the day',
+    study: "today's study",
+    prayer: "today's prayer",
+    plan: 'your reading plan',
+    journal: 'your journal'
+  };
 
   // ---------- storage ----------
   function load() { try { return C.sanitize(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) { return C.emptyData(); } }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { toast('Could not save. Storage may be full.'); } }
+  function loadReading() {
+    try {
+      const r = JSON.parse(localStorage.getItem(READ_KEY) || 'null');
+      if (r && Number.isInteger(r.b) && Number.isInteger(r.c)) {
+        return {
+          b: r.b,
+          c: r.c,
+          v: Number.isInteger(r.v) && r.v > 0 ? r.v : 1,
+          offset: Number.isFinite(+r.offset) ? Math.round(+r.offset) : 0
+        };
+      }
+    } catch (e) { /* use the older chapter, or John 1 */ }
+    if (D.last && Number.isInteger(D.last.b) && Number.isInteger(D.last.c)) return { b: D.last.b, c: D.last.c, v: 1, offset: 0 };
+    return { b: 42, c: 1, v: 1, offset: 0 };
+  }
+  function saveReading() {
+    try { localStorage.setItem(READ_KEY, JSON.stringify(reading)); }
+    catch (e) { toast('Could not save your place. Storage may be full.'); }
+  }
+  function clampReading() {
+    if (!BOOKS.length) return;
+    if (!BOOKS[reading.b]) reading = { b: Math.min(42, BOOKS.length - 1), c: 1, v: 1, offset: 0 };
+    const bk = BOOKS[reading.b];
+    if (reading.c < 1 || reading.c > bk.chapters.length) reading.c = 1;
+    const len = bk.chapters[reading.c - 1].length;
+    if (!reading.v || reading.v < 1) reading.v = 1;
+    if (reading.v > len) reading.v = len;
+    if (!Number.isFinite(reading.offset) || Math.abs(reading.offset) > 8000) reading.offset = 0;
+  }
+  function placeLabel() {
+    const bk = BOOKS[reading.b];
+    if (!bk) return '';
+    return bk.name + ' ' + reading.c + ':' + (reading.v || 1);
+  }
 
   // ---------- helpers ----------
   let toastT;
@@ -62,44 +111,198 @@
   }
 
   // ---------- navigation ----------
-  function go(v, push) {
-    view = v;
-    $$('.view').forEach(x => x.classList.toggle('on', x.id === 'v-' + v));
-    $$('nav.tabs button').forEach(x => x.classList.toggle('on', x.dataset.go === v || (v === 'settings' && x.dataset.go === 'saved')));
-    if (v === 'home') renderHome();
-    if (v === 'read') renderChapter();
-    if (v === 'plan') renderPlan();
-    if (v === 'journal') renderJournal();
-    if (v === 'saved') renderSaved();
-    if (v === 'settings') renderSettings();
-    if (v === 'search') setTimeout(() => { if (!$('#q').value) $('#q').focus(); }, 50);
-    const h = v === 'read' ? '#read/' + cur.b + '/' + cur.c : '#' + v;
-    if (location.hash !== h) history.replaceState(null, '', h);
-    if (v !== 'read') window.scrollTo(0, 0);
+  function setHash(h) { if (location.hash !== h) history.replaceState(null, '', h); }
+  function paint(name) {
+    view = name;
+    $$('.view').forEach(x => x.classList.toggle('on', x.id === 'v-' + name));
+    $$('nav.tabs button').forEach(x => x.classList.toggle('on', x.dataset.go === name || (name === 'settings' && x.dataset.go === 'saved')));
+  }
+  function go(name) {
+    if (name === 'read') { enterReading(); return; }
+    if (view === 'read' && !peek) capturePlace();
+    peek = null;
+    paint(name);
+    if (name === 'home') renderHome();
+    if (name === 'plan') renderPlan();
+    if (name === 'journal') renderJournal();
+    if (name === 'saved') renderSaved();
+    if (name === 'settings') renderSettings();
+    if (name === 'study') renderStudy();
+    if (name === 'prayer') renderPrayer();
+    if (name === 'search') setTimeout(() => { if (!$('#q').value) $('#q').focus(); }, 50);
+    window.scrollTo(0, 0);
+    setHash('#' + name);
   }
   document.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
 
-  function openRef(b, c, v) {
-    cur = { b, c }; D.last = { b, c }; save();
-    go('read');
-    if (v) setTimeout(() => {
-      const el = document.getElementById('v' + v);
-      if (el) { el.scrollIntoView({ block: 'center' }); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
-    }, 30); else window.scrollTo(0, 0);
+  function flashVerse(v) {
+    const el = document.getElementById('v' + v);
+    if (!el) return;
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  }
+  function capturePlace() {
+    if (view !== 'read' || peek || ignoreScroll || !BOOKS[cur.b]) return;
+    const verses = document.querySelectorAll('#chapter .vs');
+    if (!verses.length) return;
+    const bar = document.querySelector('.rbar');
+    const topLine = bar ? bar.getBoundingClientRect().bottom : 0;
+    let v = 1, offset = 0, found = false;
+    for (let i = 0; i < verses.length; i++) {
+      const rect = verses[i].getBoundingClientRect();
+      if (rect.bottom > topLine + 1) {
+        v = +verses[i].dataset.v;
+        offset = Math.round(rect.top - topLine);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      const el = verses[verses.length - 1];
+      v = +el.dataset.v;
+      offset = 0;
+    }
+    reading = { b: cur.b, c: cur.c, v: v || 1, offset };
+    saveReading();
+  }
+  function restorePlace(after) {
+    clearTimeout(saveTimer);
+    ignoreScroll = true;
+    const apply = () => {
+      const el = document.getElementById('v' + (reading.v || 1));
+      if (!el) { window.scrollTo(0, 0); return false; }
+      const bar = document.querySelector('.rbar');
+      const topLine = bar ? bar.getBoundingClientRect().bottom : 0;
+      const delta = el.getBoundingClientRect().top - topLine - (reading.offset || 0);
+      if (Math.abs(delta) > 1) window.scrollTo(0, Math.max(0, window.scrollY + delta));
+      const now = el.getBoundingClientRect().top - (bar ? bar.getBoundingClientRect().bottom : 0) - (reading.offset || 0);
+      return Math.abs(now) <= 2;
+    };
+    requestAnimationFrame(() => {
+      apply();
+      requestAnimationFrame(() => {
+        const aligned = apply();
+        ignoreScroll = false;
+        // Only rewrite the saved place when the verse actually landed. A short
+        // layout must not replace it with whatever happens to sit at the top.
+        if (aligned && view === 'read' && !peek) capturePlace();
+        if (after) after();
+      });
+    });
+  }
+  function updatePeekBar() {
+    const bar = $('#peekBar');
+    if (!bar) return;
+    if (!peek || view !== 'read') { bar.classList.remove('on'); return; }
+    const rbar = $('.rbar');
+    if (rbar) bar.style.top = Math.ceil(rbar.offsetHeight) + 'px';
+    $('#peekMsg').textContent = 'Opened from ' + (PEEK_FROM[peek.from] || 'another page') + '. Your saved place is still ' + placeLabel() + '.';
+    bar.classList.add('on');
+  }
+  // Real reading. This is the only path that moves the saved place.
+  function readAt(b, c, v, flash) {
+    b = +b; c = +c || 1; v = +v || 1;
+    const bk = BOOKS[b];
+    if (!bk || c < 1 || c > bk.chapters.length) return;
+    const len = bk.chapters[c - 1].length;
+    if (v < 1) v = 1;
+    if (v > len) v = len;
+    clearTimeout(saveTimer);
+    peek = null;
+    cur = { b, c };
+    reading = { b, c, v: flash ? v : 1, offset: 0 };
+    saveReading();
+    paint('read');
+    renderChapter();
+    updatePeekBar();
+    setHash('#read');
+    if (!flash) {
+      ignoreScroll = true;
+      window.scrollTo(0, 0);
+      requestAnimationFrame(() => { ignoreScroll = false; capturePlace(); });
+      return;
+    }
+    restorePlace(() => flashVerse(v));
+  }
+  function enterReading() {
+    if (view === 'read' && !peek) capturePlace();
+    peek = null;
+    clampReading();
+    cur = { b: reading.b, c: reading.c };
+    paint('read');
+    renderChapter();
+    updatePeekBar();
+    restorePlace();
+    setHash('#read');
+  }
+  // A visit from another page. Scroll and chapter changes here do not touch the saved place.
+  function openPeek(b, c, v, from) {
+    b = +b; c = +c || 1; v = +v || 0;
+    const bk = BOOKS[b];
+    if (!bk || c < 1 || c > bk.chapters.length) return;
+    const len = bk.chapters[c - 1].length;
+    if (v < 0) v = 0;
+    if (v > len) v = v ? len : 0;
+    clearTimeout(saveTimer);
+    if (view === 'read' && !peek) capturePlace();
+    peek = { from: PEEK_FROM[from] ? from : 'verse', b, c, v };
+    cur = { b, c };
+    paint('read');
+    renderChapter();
+    updatePeekBar();
+    setHash('#peek/' + b + '/' + c + '/' + v + '/' + peek.from);
+    ignoreScroll = true;
+    window.scrollTo(0, 0);
+    requestAnimationFrame(() => {
+      if (v) {
+        const el = document.getElementById('v' + v);
+        if (el) { el.scrollIntoView({ block: 'center' }); flashVerse(v); }
+      }
+      requestAnimationFrame(() => { ignoreScroll = false; });
+    });
+  }
+  function goChapter(b, c) {
+    if (peek) openPeek(b, c, 0, peek.from);
+    else readAt(b, c, 1, false);
+  }
+
+  function todayEntry() {
+    const Daily = window.BibleDaily;
+    if (!Daily || !Daily.STUDIES || !Daily.STUDIES.length) return null;
+    return Daily.forDate(C.dayNumber(new Date()));
+  }
+  function firstSentence(text) {
+    const m = String(text || '').match(/^.+?[.!?](?:\s|$)/);
+    return m ? m[0].trim() : String(text || '');
+  }
+  function paragraphs(el, text) {
+    if (!el) return;
+    const parts = String(text || '').split(/(?<=[.!?])\s+/).filter(Boolean);
+    el.innerHTML = parts.map(s => '<p>' + esc(s) + '</p>').join('');
+  }
+  function longDate() {
+    return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   }
 
   // ---------- home ----------
   function renderHome() {
     const ref = C.dailyVerseRef(new Date());
     const r = C.resolveRef(BOOKS, ref);
-    $('#dvDate').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    $('#dvDate').textContent = longDate();
     $('#dvText').textContent = r ? r.text : '';
     $('#dvRef').textContent = r ? r.label : '';
     $('#dvCopy').onclick = () => r && copyText(quote(r.text, r.label));
     $('#dvShare').onclick = () => r && shareText(quote(r.text, r.label));
-    $('#dvOpen').onclick = () => r && openRef(r.b, r.c, r.v);
-    $('#contRef').textContent = NAMES[D.last.b] + ' ' + D.last.c;
-    $('#contBtn').onclick = () => openRef(D.last.b, D.last.c);
+    $('#dvOpen').onclick = () => r && openPeek(r.b, r.c, r.v, 'verse');
+    const hint = verseText(reading.b, reading.c, reading.v || 1);
+    $('#contRef').textContent = placeLabel();
+    $('#contHint').textContent = hint ? (hint.length > 110 ? hint.slice(0, 110) + '…' : hint) : 'Your place is saved on this device.';
+    const day = todayEntry();
+    if (day) {
+      const sr = C.resolveRef(BOOKS, day.study.ref);
+      $('#homeStudyRef').textContent = sr ? sr.label : day.study.ref;
+      $('#homeStudyTease').textContent = firstSentence(day.study.message);
+      $('#homePrayerTease').textContent = firstSentence(day.prayer);
+    }
     const hp = $('#homePlan');
     const id = D.activePlan, p = id && D.plans[id];
     if (!p) { hp.innerHTML = '<h2>Reading plan</h2><div class="row"><div class="grow small">Read the Bible in a year, or the Gospels and Psalms in 90 days.</div><button class="primary" data-go="plan">Choose</button></div>'; return; }
@@ -116,12 +319,21 @@
   }
   function countDone(p, n) { let k = 0; for (let i = 0; i < n; i++) if (p.done[i]) k++; return k; }
   function chapterChips(el, chapters) {
-    chapters.forEach(({ b, c }) => { const bt = document.createElement('button'); bt.textContent = C.SHORT[b] + ' ' + c; bt.onclick = () => openRef(b, c); el.appendChild(bt); });
+    chapters.forEach(({ b, c }) => { const bt = document.createElement('button'); bt.textContent = C.SHORT[b] + ' ' + c; bt.onclick = () => openPeek(b, c, 0, 'plan'); el.appendChild(bt); });
   }
 
   // ---------- reader ----------
   function applyFont() { document.documentElement.style.setProperty('--font', D.settings.font + 'px'); }
-  function setFont(n) { D.settings.font = Math.max(14, Math.min(34, n)); applyFont(); save(); }
+  function setFont(n) {
+    D.settings.font = Math.max(14, Math.min(34, n));
+    applyFont();
+    save();
+    if (view !== 'read') return;
+    if (peek && peek.v) {
+      const el = document.getElementById('v' + peek.v);
+      if (el) el.scrollIntoView({ block: 'center' });
+    } else if (!peek) restorePlace();
+  }
   function noteVerses(b, c) {
     const s = new Set();
     D.journal.forEach(j => { if (!j.ref) return; const r = C.parseRef(j.ref, NAMES); if (r && r.b === b && r.c === c && r.v) for (let v = r.v; v <= (r.v2 || r.v); v++) s.add(v); });
@@ -144,13 +356,12 @@
     const atStart = cur.b === 0 && cur.c === 1, atEnd = cur.b === BOOKS.length - 1 && cur.c === bk.chapters.length;
     ['#prevCh', '#prevCh2'].forEach(s => $(s).disabled = atStart);
     ['#nextCh', '#nextCh2'].forEach(s => $(s).disabled = atEnd);
-    if (view === 'read') history.replaceState(null, '', '#read/' + cur.b + '/' + cur.c);
   }
   function step(d) {
-    let { b, c } = cur; c += d;
+    let b = cur.b, c = cur.c + d;
     if (c < 1) { if (b === 0) return; b--; c = BOOKS[b].chapters.length; }
     else if (c > BOOKS[b].chapters.length) { if (b === BOOKS.length - 1) return; b++; c = 1; }
-    openRef(b, c);
+    goChapter(b, c);
   }
   $('#prevCh').onclick = $('#prevCh2').onclick = () => step(-1);
   $('#nextCh').onclick = $('#nextCh2').onclick = () => step(1);
@@ -170,12 +381,12 @@
     body.innerHTML = sec('Old Testament', 0, 39) + sec('New Testament', 39, 66);
     body.onclick = e => {
       const bb = e.target.closest('[data-b]'); if (bb) { showChapters(+bb.dataset.b); return; }
-      const cb = e.target.closest('[data-c]'); if (cb) { closeDlg(dlg); openRef(+cb.dataset.bk, +cb.dataset.c); }
+      const cb = e.target.closest('[data-c]'); if (cb) { closeDlg(dlg); goChapter(+cb.dataset.bk, +cb.dataset.c); }
     };
     if (!dlg.open) dlg.showModal();
     function showChapters(b) {
       const n = BOOKS[b].chapters.length;
-      if (n === 1) { closeDlg(dlg); openRef(b, 1); return; }
+      if (n === 1) { closeDlg(dlg); goChapter(b, 1); return; }
       $('#pickTitle').textContent = NAMES[b];
       let h = '<button class="link" id="pickBack">‹ All books</button><div class="grid ch" style="margin-top:6px">';
       for (let c = 1; c <= n; c++) h += '<button data-bk="' + b + '" data-c="' + c + '" class="' + (b === cur.b && c === cur.c ? 'cur' : '') + '">' + c + '</button>';
@@ -245,7 +456,7 @@
       (res.total > res.results.length ? '<div class="btns"><button id="sMore" style="width:100%">Show more</button></div>' : '');
     const more = $('#sMore'); if (more) more.onclick = () => runSearch(q, (limit || 300) + 500);
   }
-  $('#sResults').onclick = e => { const it = e.target.closest('[data-b]'); if (it) openRef(+it.dataset.b, +it.dataset.c, +it.dataset.v || 0); };
+  $('#sResults').onclick = e => { const it = e.target.closest('[data-b]'); if (it) readAt(+it.dataset.b, +it.dataset.c, +it.dataset.v || 1, true); };
 
   // ---------- reading plan ----------
   function toggleDay(id, i) {
@@ -287,7 +498,7 @@
     $('#dayList').innerHTML = rows;
     $('#toggleDays').onclick = () => { showAllDays = !showAllDays; renderPlan(); };
     body.querySelectorAll('input[data-d]').forEach(cb => cb.onchange = () => { toggleDay(id, +cb.dataset.d); renderPlan(); });
-    body.querySelectorAll('[data-open]').forEach(el => el.onclick = () => { const ch = plan[+el.dataset.open][0]; if (ch) openRef(ch.b, ch.c); });
+    body.querySelectorAll('[data-open]').forEach(el => el.onclick = () => { const ch = plan[+el.dataset.open][0]; if (ch) openPeek(ch.b, ch.c, 0, 'plan'); });
     wirePlanChooser();
   }
   function wirePlanChooser() {
@@ -317,11 +528,20 @@
     if (q) list = list.filter(j => ((j.title || '') + ' ' + (j.body || '') + ' ' + (j.ref || '')).toLowerCase().includes(q));
     $('#jList').innerHTML = list.length ? list.map(j => '<div class="item" data-j="' + esc(j.id) + '"><div class="row"><b class="grow">' + esc(j.title || '(untitled)') + '</b>' +
       (j.type === 'prayer' ? (j.answered ? '<span class="badge ok">Answered</span>' : '<span class="badge">Prayer</span>') : '<span class="badge">Note</span>') + '</div>' +
-      '<div class="meta">' + esc(fmtDate(j.date)) + (j.ref ? ' · <span class="ref">' + esc(j.ref) + '</span>' : '') + '</div>' +
+      '<div class="meta">' + esc(fmtDate(j.date)) + (j.ref ? ' · <button type="button" class="link" data-jref="' + esc(j.ref) + '">' + esc(j.ref) + '</button>' : '') + '</div>' +
       (j.body ? '<div class="meta" style="color:var(--text);white-space:pre-wrap">' + esc(j.body.length > 180 ? j.body.slice(0, 180) + '…' : j.body) + '</div>' : '') + '</div>').join('')
       : '<div class="empty">' + (D.journal.length ? 'No entries match.' : 'No entries yet. Tap “+ New” to write a prayer or a note.') + '</div>';
   }
-  $('#jList').onclick = e => { const it = e.target.closest('[data-j]'); if (it) openJournal(it.dataset.j); };
+  $('#jList').onclick = e => {
+    const refBtn = e.target.closest('[data-jref]');
+    if (refBtn) {
+      const r = C.resolveRef(BOOKS, refBtn.dataset.jref);
+      if (r) openPeek(r.b, r.c, r.v, 'journal');
+      else toast('Reference not recognised');
+      return;
+    }
+    const it = e.target.closest('[data-j]'); if (it) openJournal(it.dataset.j);
+  };
   function setJType(t) { jType = t; $$('#jType button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); $('#jAnsweredRow').style.display = t === 'prayer' ? 'flex' : 'none'; }
   $('#jType').onclick = e => { const b = e.target.closest('[data-t]'); if (b) setJType(b.dataset.t); };
   function refPreview() {
@@ -381,7 +601,7 @@
   $('#savedList').onclick = e => {
     const rm = e.target.closest('[data-rm]');
     if (rm) { e.stopPropagation(); delete (savedKind === 'bm' ? D.bookmarks : D.highlights)[rm.dataset.rm]; save(); renderSaved(); return; }
-    const it = e.target.closest('[data-b]'); if (it) openRef(+it.dataset.b, +it.dataset.c, +it.dataset.v);
+    const it = e.target.closest('[data-b]'); if (it) readAt(+it.dataset.b, +it.dataset.c, +it.dataset.v || 1, true);
   };
 
   // ---------- settings ----------
@@ -419,30 +639,81 @@
   };
   $('#impMerge').onclick = () => { D = C.mergeData(D, pendingImport); finishImport('Backup merged'); };
   $('#impReplace').onclick = () => { if (!confirm('Replace all data on this device with the backup?')) return; D = C.sanitize(pendingImport); finishImport('Backup restored'); };
-  function finishImport(msg) { save(); closeDlg($('#impDlg')); cur = { b: D.last.b, c: D.last.c }; applyTheme(); applyFont(); renderSettings(); toast(msg); }
+  function finishImport(msg) { save(); closeDlg($('#impDlg')); applyTheme(); applyFont(); renderSettings(); toast(msg); }
   $('#resetBtn').onclick = () => {
-    if (!confirm('Erase all bookmarks, highlights, journal entries and plan progress on this device? Export a backup first if you want to keep them.')) return;
-    D = C.emptyData(); save(); cur = { b: D.last.b, c: D.last.c }; applyTheme(); applyFont(); renderSettings(); toast('All data erased');
+    if (!confirm('Erase all bookmarks, highlights, journal entries and plan progress on this device? Your reading place is kept. Export a backup first if you want to keep the rest.')) return;
+    D = C.emptyData(); save(); applyTheme(); applyFont(); renderSettings(); toast('All data erased');
   };
 
+  function renderStudy() {
+    const day = todayEntry();
+    $('#stDate').textContent = longDate();
+    if (!day) { $('#stText').textContent = 'Daily study could not be loaded.'; return; }
+    const r = C.resolveRef(BOOKS, day.study.ref);
+    $('#stRef').textContent = r ? r.label : day.study.ref;
+    $('#stText').textContent = r ? r.text : '';
+    paragraphs($('#stBody'), day.study.message);
+    $('#stContext').onclick = () => { if (r) openPeek(r.b, r.c, r.v, 'study'); };
+    $('#stPrayer').onclick = () => go('prayer');
+    const blob = (r ? quote(r.text, r.label) + '\n\n' : '') + day.study.message;
+    $('#stCopy').onclick = () => copyText(blob);
+    $('#stShare').onclick = () => shareText(blob);
+  }
+  function renderPrayer() {
+    const day = todayEntry();
+    $('#prDate').textContent = longDate();
+    if (!day) { $('#prBody').textContent = 'Daily prayer could not be loaded.'; return; }
+    const r = C.resolveRef(BOOKS, day.study.ref);
+    $('#prRef').textContent = r ? r.label : day.study.ref;
+    $('#prVerse').textContent = r ? r.text : '';
+    paragraphs($('#prBody'), day.prayer);
+    $('#prContext').onclick = () => { if (r) openPeek(r.b, r.c, r.v, 'prayer'); };
+    $('#prStudy').onclick = () => go('study');
+    const blob = (r ? r.label + ' (KJV)\n"' + r.text + '"\n\n' : '') + day.prayer;
+    $('#prCopy').onclick = () => copyText(blob);
+    $('#prShare').onclick = () => shareText(blob);
+  }
+
   function route() {
-    const h = location.hash.slice(1).split('/');
-    if (h[0] === 'read' && h[1] !== undefined && BOOKS[+h[1]]) openRef(+h[1], +h[2] || 1, +h[3] || 0);
-    else if (['home', 'read', 'search', 'plan', 'journal', 'saved', 'settings'].includes(h[0])) go(h[0]);
-    else go('home');
+    const parts = location.hash.replace(/^#/, '').split('/');
+    const head = parts[0] || '';
+    if (head === 'peek' && BOOKS[+parts[1]]) {
+      openPeek(+parts[1], +parts[2] || 1, +parts[3] || 0, parts[4] || 'verse');
+      return;
+    }
+    if (head === 'read' || head === '') { enterReading(); return; }
+    if (['home', 'search', 'plan', 'journal', 'saved', 'settings', 'study', 'prayer'].includes(head)) { go(head); return; }
+    enterReading();
   }
 
   // ---------- start ----------
   applyTheme(); applyFont();
   loadBible().then(data => {
     BOOKS = data.books; NAMES = BOOKS.map(b => b.name);
-    if (!BOOKS[cur.b]) cur = { b: 42, c: 1 };
+    clampReading();
+    cur = { b: reading.b, c: reading.c };
+    saveReading();
     $('#loading').remove();
     route();
     window.addEventListener('hashchange', route);
   }).catch(err => {
     $('#loadMsg').textContent = 'Could not load the Bible text: ' + err.message;
     document.querySelector('#loading .spin').style.display = 'none';
+  });
+
+  window.addEventListener('scroll', () => {
+    if (ignoreScroll || view !== 'read' || peek) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      if (!ignoreScroll && view === 'read' && !peek) capturePlace();
+    }, 200);
+  }, { passive: true });
+  function persistReading() {
+    if (view === 'read' && !peek && !ignoreScroll) capturePlace();
+  }
+  window.addEventListener('pagehide', persistReading);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') persistReading();
   });
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
