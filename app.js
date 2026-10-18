@@ -21,6 +21,7 @@
 
   const PEEK_FROM = {
     verse: 'the verse of the day',
+    now: 'the verse for right now',
     study: "today's study",
     prayer: "today's prayer",
     plan: 'your reading plan',
@@ -283,8 +284,52 @@
     return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   }
 
+  // ---------- verse for right now ----------
+  // Clock-based. Nothing here is stored, and opening it uses the peek reader,
+  // so the saved place, daily study, and daily prayer stay where they are.
+  let nowSlotShown = null;
+  let nowTimer = 0;
+  let nowPoll = 0;
+  function studyRefNow() {
+    const day = todayEntry();
+    return day && day.study ? day.study.ref : '';
+  }
+  function nextVerseNote(now, next) {
+    const time = next.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const sameDay = now.getFullYear() === next.getFullYear() && now.getMonth() === next.getMonth() && now.getDate() === next.getDate();
+    return 'New verse every 90 minutes · Next at ' + time + (sameDay ? '' : ' tomorrow');
+  }
+  function renderNowVerse() {
+    if (!BOOKS.length || !C.verseForNow) return;
+    const now = new Date();
+    const picked = C.verseForNow(now, null, studyRefNow());
+    if (!picked || picked.slot === nowSlotShown) return;
+    const r = C.resolveRef(BOOKS, picked.ref);
+    nowSlotShown = picked.slot;
+    const note = $('#nowNote'), text = $('#nowText'), ref = $('#nowRef');
+    if (note) note.textContent = nextVerseNote(now, picked.nextAt);
+    if (text) text.textContent = r ? r.text : '';
+    if (ref) ref.textContent = r ? r.label : picked.ref;
+    const copy = $('#nowCopy'), open = $('#nowOpen');
+    if (copy) copy.onclick = () => r && copyText(quote(r.text, r.label));
+    if (open) open.onclick = () => r && openPeek(r.b, r.c, r.v, 'now');
+  }
+  function watchNowVerse() {
+    renderNowVerse();
+    clearTimeout(nowTimer);
+    clearInterval(nowPoll);
+    if (!C.nextVerseAt) return;
+    const wait = Math.max(500, C.nextVerseAt(new Date()).getTime() - Date.now() + 400);
+    nowTimer = setTimeout(() => { nowSlotShown = null; watchNowVerse(); }, Math.min(wait, 2147483647));
+    nowPoll = setInterval(() => {
+      if (!BOOKS.length || !C.nowSlot) return;
+      if (C.nowSlot(new Date()) !== nowSlotShown) renderNowVerse();
+    }, 30000);
+  }
+
   // ---------- home ----------
   function renderHome() {
+    renderNowVerse();
     const ref = C.dailyVerseRef(new Date());
     const r = C.resolveRef(BOOKS, ref);
     $('#dvDate').textContent = longDate();
@@ -695,6 +740,7 @@
     saveReading();
     $('#loading').remove();
     route();
+    watchNowVerse();
     window.addEventListener('hashchange', route);
   }).catch(err => {
     $('#loadMsg').textContent = 'Could not load the Bible text: ' + err.message;
@@ -714,6 +760,7 @@
   window.addEventListener('pagehide', persistReading);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') persistReading();
+    else if (BOOKS.length) { nowSlotShown = null; watchNowVerse(); }
   });
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {

@@ -59,6 +59,42 @@
     'Revelation 21:5','Revelation 22:13'
   ];
 
+  // Short encouraging passages for "Verse for right now".
+  // References only; the KJV text is loaded with the rest of the Bible.
+  // One passage is chosen per 90-minute block of the local clock.
+  const NOW_VERSES = [
+    'Genesis 28:15','Exodus 14:14','Exodus 33:14','Numbers 6:24-26','Deuteronomy 31:6','Deuteronomy 31:8','Deuteronomy 33:27',
+    'Joshua 1:9','1 Chronicles 16:34','2 Chronicles 15:7','2 Chronicles 20:15','Nehemiah 8:10','Job 19:25',
+    'Psalms 4:8','Psalms 9:9','Psalms 16:8','Psalms 16:11','Psalms 18:2','Psalms 18:30','Psalms 23:1','Psalms 23:2','Psalms 23:3','Psalms 23:4','Psalms 23:6',
+    'Psalms 27:1','Psalms 27:14','Psalms 28:7','Psalms 29:11','Psalms 30:5','Psalms 31:24','Psalms 32:8','Psalms 34:4','Psalms 34:8','Psalms 34:17','Psalms 34:18',
+    'Psalms 37:4','Psalms 37:5','Psalms 37:7','Psalms 40:1','Psalms 42:11','Psalms 46:1','Psalms 46:10','Psalms 55:22','Psalms 56:3','Psalms 62:1','Psalms 62:2','Psalms 62:8',
+    'Psalms 63:3','Psalms 68:19','Psalms 73:26','Psalms 84:11','Psalms 86:5','Psalms 91:1','Psalms 91:4','Psalms 91:11','Psalms 94:19','Psalms 100:5','Psalms 103:8',
+    'Psalms 107:1','Psalms 107:9','Psalms 112:7','Psalms 118:6','Psalms 118:24','Psalms 119:105','Psalms 119:114','Psalms 119:165',
+    'Psalms 121:1','Psalms 121:2','Psalms 121:7','Psalms 121:8','Psalms 130:5','Psalms 136:1','Psalms 138:3','Psalms 139:14','Psalms 145:18','Psalms 147:3',
+    'Proverbs 3:5','Proverbs 3:6','Proverbs 16:3','Proverbs 16:9','Proverbs 17:22','Proverbs 18:10','Proverbs 30:5',
+    'Isaiah 12:2','Isaiah 26:3','Isaiah 26:4','Isaiah 30:21','Isaiah 40:8','Isaiah 40:29','Isaiah 40:31','Isaiah 41:10','Isaiah 41:13','Isaiah 43:1','Isaiah 43:2','Isaiah 43:25','Isaiah 46:4','Isaiah 54:10','Isaiah 54:17','Isaiah 65:24',
+    'Jeremiah 29:11','Jeremiah 31:3','Jeremiah 32:17','Jeremiah 33:3','Lamentations 3:22','Lamentations 3:23','Lamentations 3:25',
+    'Micah 7:7','Micah 7:8','Micah 7:18','Nahum 1:7','Habakkuk 3:19','Zephaniah 3:17','Zechariah 4:6','Malachi 3:6',
+    'Matthew 6:26','Matthew 6:33','Matthew 6:34','Matthew 7:7','Matthew 11:28','Matthew 11:29','Matthew 11:30','Matthew 19:26','Matthew 28:20',
+    'Luke 1:37','Luke 12:7','Luke 12:32',
+    'John 1:5','John 3:16','John 3:17','John 6:35','John 8:12','John 8:36','John 10:10','John 10:11','John 11:25','John 14:1','John 14:6','John 14:27','John 15:5','John 15:13','John 16:33',
+    'Acts 16:31',
+    'Romans 5:1','Romans 5:8','Romans 8:1','Romans 8:18','Romans 8:28','Romans 8:31','Romans 8:37','Romans 8:38-39','Romans 10:13','Romans 15:13',
+    '1 Corinthians 10:13','1 Corinthians 15:57','1 Corinthians 16:14',
+    '2 Corinthians 4:16','2 Corinthians 4:17','2 Corinthians 5:7','2 Corinthians 5:17','2 Corinthians 9:8','2 Corinthians 12:9',
+    'Galatians 2:20','Galatians 5:1','Galatians 6:9',
+    'Ephesians 2:8','Ephesians 2:10','Ephesians 3:20','Ephesians 6:10',
+    'Philippians 1:6','Philippians 4:4','Philippians 4:6','Philippians 4:7','Philippians 4:13','Philippians 4:19',
+    'Colossians 1:17','Colossians 3:15',
+    '1 Thessalonians 5:11','1 Thessalonians 5:16','1 Thessalonians 5:18','2 Thessalonians 3:3','2 Thessalonians 3:16',
+    '1 Timothy 6:6','2 Timothy 1:7','2 Timothy 2:13',
+    'Hebrews 4:16','Hebrews 6:19','Hebrews 10:23','Hebrews 13:5','Hebrews 13:6','Hebrews 13:8',
+    'James 1:5','James 1:17','James 4:8',
+    '1 Peter 1:3','1 Peter 5:7','1 Peter 5:10',
+    '1 John 1:9','1 John 3:1','1 John 4:4','1 John 4:8','1 John 4:16','1 John 4:18','1 John 4:19',
+    'Revelation 21:4','Revelation 21:5','Revelation 22:13'
+  ];
+
   const NT_START = 39; // index of Matthew
 
   function norm(s) { return s.toLowerCase().replace(/\s+/g, ' ').trim(); }
@@ -114,6 +150,62 @@
     list = list || DAILY_VERSES;
     const n = dayNumber(date);
     return list[((n % list.length) + list.length) % list.length];
+  }
+
+  // Clock slots for the rotating "right now" verse. A day divides evenly:
+  // 24 * 60 / 90 = 16 slots, so the choice follows local time and not a timer.
+  const NOW_SLOT_MINUTES = 90;
+  const NOW_SLOTS_PER_DAY = (24 * 60) / NOW_SLOT_MINUTES;
+
+  function asDate(date) { return date instanceof Date ? date : new Date(date); }
+
+  function nowSlot(date) {
+    const d = asDate(date);
+    const slotOfDay = Math.floor((d.getHours() * 60 + d.getMinutes()) / NOW_SLOT_MINUTES);
+    return dayNumber(d) * NOW_SLOTS_PER_DAY + slotOfDay;
+  }
+
+  function nextVerseAt(date) {
+    const d = asDate(date);
+    const slotOfDay = Math.floor((d.getHours() * 60 + d.getMinutes()) / NOW_SLOT_MINUTES);
+    const next = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+    next.setMinutes((slotOfDay + 1) * NOW_SLOT_MINUTES);
+    return next;
+  }
+
+  // "John 3:16" and "John 3:16-17" share a verse. Used so the rotating verse
+  // can step aside when it would repeat today's study.
+  function verseSpan(ref) {
+    const m = String(ref == null ? '' : ref).trim().match(/^(.*?)\s+(\d+):(\d+)(?:\s*[-–]\s*(\d+))?$/);
+    if (!m) return null;
+    const v = +m[3], v2 = m[4] ? +m[4] : v;
+    return { book: m[1].replace(/\s+/g, ' ').toLowerCase(), c: +m[2], v: Math.min(v, v2), v2: Math.max(v, v2) };
+  }
+
+  function verseRefsOverlap(a, b) {
+    const x = verseSpan(a), y = verseSpan(b);
+    if (!x || !y) return false;
+    return x.book === y.book && x.c === y.c && x.v <= y.v2 && y.v <= x.v2;
+  }
+
+  function verseForNow(date, list, avoidRef) {
+    list = list && list.length ? list : NOW_VERSES;
+    const len = list.length;
+    if (!len) return null;
+    const slot = nowSlot(date);
+    let index = ((slot % len) + len) % len;
+    if (avoidRef && len > 1 && verseRefsOverlap(list[index], avoidRef)) {
+      // Jump well away from this slot so the next 90 minutes keeps its own verse.
+      const jump = Math.max(1, Math.floor(len / 2));
+      let alt = (index + jump) % len;
+      let guard = 0;
+      while (guard < len && verseRefsOverlap(list[alt], avoidRef)) {
+        alt = (alt + 1) % len;
+        guard++;
+      }
+      index = alt;
+    }
+    return { ref: list[index], index: index, slot: slot, nextAt: nextVerseAt(date) };
   }
 
   // Split an ordered list into `days` consecutive groups as evenly as possible, no gaps or overlaps.
@@ -229,6 +321,7 @@
     return a;
   }
 
-  return { SHORT, DAILY_VERSES, PLANS, NT_START, parseRef, refLabel, resolveRef, dayNumber, isoToDayNumber, dayNumberToIso, todayIso, dailyVerseRef,
+  return { SHORT, DAILY_VERSES, NOW_VERSES, NOW_SLOT_MINUTES, PLANS, NT_START, parseRef, refLabel, resolveRef, dayNumber, isoToDayNumber, dayNumberToIso, todayIso, dailyVerseRef,
+    nowSlot, nextVerseAt, verseRefsOverlap, verseForNow,
     splitEven, chapterList, buildPlan, describeReading, planDayIndex, planStreak, buildSearchIndex, search, emptyData, sanitize, mergeData };
 });
