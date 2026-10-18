@@ -132,6 +132,16 @@ dialog h3{margin:0 0 12px;font-size:19px}
       <div class="small" id="contHint">Your place is saved on this device.</div>
       <button class="primary" id="contBtn" data-go="read" style="width:100%;margin-top:12px">Continue reading</button>
     </div>
+    <div class="card" id="nowCard">
+      <h2>Verse for right now</h2>
+      <div class="small" id="nowNote">New verse every 90 minutes</div>
+      <div class="dv-text serif" id="nowText"></div>
+      <div class="dv-ref" id="nowRef"></div>
+      <div class="btns grow">
+        <button id="nowCopy">Copy</button>
+        <button class="primary" id="nowOpen">Read in context</button>
+      </div>
+    </div>
     <div class="card">
       <h2>Verse of the day</h2>
       <div class="small" id="dvDate"></div>
@@ -266,7 +276,7 @@ dialog h3{margin:0 0 12px;font-size:19px}
     </div>
     <div class="card">
       <h2>Backup &amp; move between devices</h2>
-      <p class="small" style="margin-top:0">Your bookmarks, highlights, journal and plan progress are saved only on this device. Export a backup file, then import it on your phone or PC. Your reading place is saved separately on this device. The daily verse, study, prayer, plan, and journal do not move it.</p>
+      <p class="small" style="margin-top:0">Your bookmarks, highlights, journal and plan progress are saved only on this device. Export a backup file, then import it on your phone or PC. Your reading place is saved separately on this device. The verse for right now, daily verse, study, prayer, plan, and journal do not move it.</p>
       <div class="btns grow"><button class="primary" id="exportBtn">Export backup</button><button id="importBtn">Import backup</button></div>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <div class="small" id="dataSummary" style="margin-top:10px"></div>

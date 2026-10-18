@@ -1,7 +1,7 @@
 {
   "name": "Bible (KJV)",
   "short_name": "Bible",
-  "description": "King James Bible with daily verse, daily study, daily prayer, reading plans, and a prayer journal. Remembers your place. Works offline.",
+  "description": "King James Bible with a verse every 90 minutes, daily verse, daily study, daily prayer, reading plans, and a prayer journal. Remembers your place. Works offline.",
   "start_url": "./index.html#read",
   "scope": "./",
   "display": "standalone",
