@@ -321,7 +321,97 @@
     return a;
   }
 
+  // Spoken scripture. Short pieces keep mobile voices from stopping mid-sentence.
+  const SPEECH_RATE = 0.92;
+  const SPEECH_MAX = 220;
+
+  function speakRef(label) {
+    const m = String(label || '').trim().match(/^(.*?)\s+(\d+)(?::(\d+)(?:\s*[-–]\s*(\d+))?)?$/);
+    if (!m) return String(label || '').trim();
+    let s = m[1] + ' chapter ' + m[2];
+    if (m[3] && m[4]) s += ', verses ' + m[3] + ' to ' + m[4];
+    else if (m[3]) s += ', verse ' + m[3];
+    return s;
+  }
+
+  function hardWrapSpeech(sentence, max) {
+    const words = String(sentence || '').split(' ').filter(Boolean);
+    const out = [];
+    let buf = '';
+    words.forEach(word => {
+      if (word.length > max) {
+        if (buf) { out.push(buf); buf = ''; }
+        for (let i = 0; i < word.length; i += max) out.push(word.slice(i, i + max));
+        return;
+      }
+      if (!buf) buf = word;
+      else if ((buf + ' ' + word).length <= max) buf += ' ' + word;
+      else { out.push(buf); buf = word; }
+    });
+    if (buf) out.push(buf);
+    return out;
+  }
+
+  function speechPieces(text, max) {
+    max = max || SPEECH_MAX;
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return [];
+    const out = [];
+    let buf = '';
+    clean.split(/(?<=[.!?;:])\s+/).forEach(sentence => {
+      if (sentence.length > max) {
+        if (buf) { out.push(buf); buf = ''; }
+        hardWrapSpeech(sentence, max).forEach(part => out.push(part));
+        return;
+      }
+      if (!buf) buf = sentence;
+      else if ((buf + ' ' + sentence).length <= max) buf += ' ' + sentence;
+      else { out.push(buf); buf = sentence; }
+    });
+    if (buf) out.push(buf);
+    return out;
+  }
+
+  function passageSpeechParts(label, verseText, extra) {
+    const parts = [];
+    const ref = speakRef(label);
+    if (ref) parts.push({ text: ref + '.', verse: 0 });
+    speechPieces(verseText).forEach(text => parts.push({ text: text, verse: 0 }));
+    speechPieces(extra).forEach(text => parts.push({ text: text, verse: 0 }));
+    return parts;
+  }
+
+  function chapterSpeechParts(bookName, chapterNum, verses, startVerse) {
+    const list = Array.isArray(verses) ? verses : [];
+    const start = list.length ? Math.min(list.length, Math.max(1, startVerse || 1)) : 1;
+    const parts = [{ text: String(bookName || 'This').trim() + ' chapter ' + chapterNum + '.', verse: 0 }];
+    for (let v = start; v <= list.length; v++) speechPieces(list[v - 1]).forEach(text => parts.push({ text: text, verse: v }));
+    return parts.filter(p => p.text);
+  }
+
+  // Prefer a local English voice so speaking stays on the device when one is installed.
+  function pickEnglishVoice(voices) {
+    const list = Array.isArray(voices) ? voices.filter(v => v && v.lang) : [];
+    const en = list.filter(v => /^en([_-]|$)/i.test(String(v.lang)));
+    if (!en.length) return null;
+    function score(v) {
+      const lang = String(v.lang || '').toLowerCase().replace('_', '-');
+      const name = String(v.name || '').toLowerCase();
+      let s = 0;
+      if (v.localService) s += 8;
+      if (lang.indexOf('en-us') === 0) s += 4;
+      else if (lang.indexOf('en-gb') === 0) s += 3;
+      else if (lang === 'en') s += 2;
+      else s += 1;
+      if (/samantha|daniel|alex|karen|moira|serena|aaron|nicky|google us english|google uk english female|aria|jenny|guy|sonia|libby/.test(name)) s += 3;
+      if (/compact|novelty|whisper|espeak/.test(name)) s -= 4;
+      return s;
+    }
+    return en.slice().sort((a, b) => score(b) - score(a) || String(a.name || '').localeCompare(String(b.name || '')))[0];
+  }
+
   return { SHORT, DAILY_VERSES, NOW_VERSES, NOW_SLOT_MINUTES, PLANS, NT_START, parseRef, refLabel, resolveRef, dayNumber, isoToDayNumber, dayNumberToIso, todayIso, dailyVerseRef,
     nowSlot, nextVerseAt, verseRefsOverlap, verseForNow,
+    SPEECH_RATE, speakRef, speechPieces, passageSpeechParts, chapterSpeechParts, pickEnglishVoice,
     splitEven, chapterList, buildPlan, describeReading, planDayIndex, planStreak, buildSearchIndex, search, emptyData, sanitize, mergeData };
 });

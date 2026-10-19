@@ -18,6 +18,8 @@
   let peek = null;
   let ignoreScroll = false;
   let saveTimer = 0;
+  // While speech is following a verse, scroll must not rewrite the saved place.
+  let speechHold = false;
 
   const PEEK_FROM = {
     verse: 'the verse of the day',
@@ -119,6 +121,7 @@
     $$('nav.tabs button').forEach(x => x.classList.toggle('on', x.dataset.go === name || (name === 'settings' && x.dataset.go === 'saved')));
   }
   function go(name) {
+    stopSpeech();
     if (name === 'read') { enterReading(); return; }
     if (view === 'read' && !peek) capturePlace();
     peek = null;
@@ -142,10 +145,10 @@
     el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
   }
   function capturePlace() {
-    if (view !== 'read' || peek || ignoreScroll || !BOOKS[cur.b]) return;
+    if (speechHold || view !== 'read' || peek || ignoreScroll || !BOOKS[cur.b]) return;
     const verses = document.querySelectorAll('#chapter .vs');
     if (!verses.length) return;
-    const bar = document.querySelector('.rbar');
+    const bar = document.querySelector('.readtop') || document.querySelector('.rbar');
     const topLine = bar ? bar.getBoundingClientRect().bottom : 0;
     let v = 1, offset = 0, found = false;
     for (let i = 0; i < verses.length; i++) {
@@ -171,7 +174,7 @@
     const apply = () => {
       const el = document.getElementById('v' + (reading.v || 1));
       if (!el) { window.scrollTo(0, 0); return false; }
-      const bar = document.querySelector('.rbar');
+      const bar = document.querySelector('.readtop') || document.querySelector('.rbar');
       const topLine = bar ? bar.getBoundingClientRect().bottom : 0;
       const delta = el.getBoundingClientRect().top - topLine - (reading.offset || 0);
       if (Math.abs(delta) > 1) window.scrollTo(0, Math.max(0, window.scrollY + delta));
@@ -194,13 +197,14 @@
     const bar = $('#peekBar');
     if (!bar) return;
     if (!peek || view !== 'read') { bar.classList.remove('on'); return; }
-    const rbar = $('.rbar');
+    const rbar = document.querySelector('.readtop') || $('.rbar');
     if (rbar) bar.style.top = Math.ceil(rbar.offsetHeight) + 'px';
     $('#peekMsg').textContent = 'Opened from ' + (PEEK_FROM[peek.from] || 'another page') + '. Your saved place is still ' + placeLabel() + '.';
     bar.classList.add('on');
   }
   // Real reading. This is the only path that moves the saved place.
   function readAt(b, c, v, flash) {
+    stopSpeech();
     b = +b; c = +c || 1; v = +v || 1;
     const bk = BOOKS[b];
     if (!bk || c < 1 || c > bk.chapters.length) return;
@@ -225,6 +229,7 @@
     restorePlace(() => flashVerse(v));
   }
   function enterReading() {
+    stopSpeech();
     if (view === 'read' && !peek) capturePlace();
     peek = null;
     clampReading();
@@ -237,6 +242,7 @@
   }
   // A visit from another page. Scroll and chapter changes here do not touch the saved place.
   function openPeek(b, c, v, from) {
+    stopSpeech();
     b = +b; c = +c || 1; v = +v || 0;
     const bk = BOOKS[b];
     if (!bk || c < 1 || c > bk.chapters.length) return;
@@ -284,6 +290,183 @@
     return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   }
 
+  // ---------- listen (device voice only; never writes the reading place) ----------
+  const LISTEN_IDS = ['nowListen', 'stListen', 'prListen', 'readListen'];
+  let speechSession = null;
+  let speechKeepAlive = 0;
+  let speechHoldTimer = 0;
+  let nowSpoken = null;
+
+  function speechSupported() {
+    try {
+      return typeof window.speechSynthesis !== 'undefined'
+        && typeof window.SpeechSynthesisUtterance === 'function'
+        && typeof window.speechSynthesis.speak === 'function'
+        && typeof window.speechSynthesis.cancel === 'function';
+    } catch (e) { return false; }
+  }
+  function isIOSDevice() {
+    const ua = navigator.userAgent || '';
+    return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+  function setSpeakingButton(btn, speaking) {
+    if (!btn) return;
+    btn.textContent = speaking ? 'Stop' : (btn.dataset.label || 'Listen');
+    btn.classList.toggle('is-speaking', !!speaking);
+    btn.setAttribute('aria-pressed', speaking ? 'true' : 'false');
+  }
+  function resetListenButtons() {
+    LISTEN_IDS.forEach(id => setSpeakingButton(document.getElementById(id), false));
+  }
+  function cancelSynth() {
+    if (!speechSupported()) return;
+    try { window.speechSynthesis.cancel(); } catch (e) { /* already stopped */ }
+  }
+  function holdPlace() {
+    speechHold = true;
+    clearTimeout(speechHoldTimer);
+    speechHoldTimer = setTimeout(() => { speechHold = false; ignoreScroll = false; }, 800);
+  }
+  function stopSpeech() {
+    const session = speechSession;
+    speechSession = null;
+    clearInterval(speechKeepAlive);
+    speechKeepAlive = 0;
+    if (session) cancelSynth();
+    document.querySelectorAll('#chapter .vs.speak').forEach(el => el.classList.remove('speak'));
+    resetListenButtons();
+    if (!session) return;
+    if (session.restoreScroll && session.viewName === view) {
+      ignoreScroll = true;
+      window.scrollTo(0, session.scrollY || 0);
+    }
+    if (session.readingSnap) {
+      try {
+        reading = JSON.parse(session.readingSnap);
+        if (localStorage.getItem(READ_KEY) !== session.readingSnap) saveReading();
+      } catch (e) { /* keep the place already stored */ }
+    }
+    holdPlace();
+  }
+  function highlightSpokenVerse(verse) {
+    document.querySelectorAll('#chapter .vs.speak').forEach(el => el.classList.remove('speak'));
+    if (!verse || view !== 'read') return;
+    const el = document.getElementById('v' + verse);
+    if (!el) return;
+    el.classList.add('speak');
+    if (speechSession) speechSession.verse = verse;
+    ignoreScroll = true;
+    try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    catch (e) { try { el.scrollIntoView(); } catch (err) { /* keep reading */ } }
+    setTimeout(() => { if (speechSession) ignoreScroll = false; }, 600);
+  }
+  function armSpeechKeepAlive() {
+    clearInterval(speechKeepAlive);
+    if (!isIOSDevice()) return;
+    speechKeepAlive = setInterval(() => {
+      if (!speechSession || !speechSupported()) { clearInterval(speechKeepAlive); return; }
+      try {
+        if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+        else if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        }
+      } catch (e) { /* this device will not keep the voice awake */ }
+    }, 10000);
+  }
+  function speakAt(session, index) {
+    if (speechSession !== session) return;
+    if (index >= session.parts.length) { stopSpeech(); return; }
+    const part = session.parts[index];
+    if (session.highlight && part.verse) highlightSpokenVerse(part.verse);
+    let utterance;
+    try { utterance = new SpeechSynthesisUtterance(part.text); }
+    catch (e) { stopSpeech(); toast('Listening is not available on this device.'); return; }
+    utterance.rate = C.SPEECH_RATE || 0.92;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    utterance.lang = 'en-US';
+    try {
+      const voice = C.pickEnglishVoice(window.speechSynthesis.getVoices());
+      if (voice) { utterance.voice = voice; if (voice.lang) utterance.lang = voice.lang; }
+    } catch (e) { /* the device default voice is fine */ }
+    utterance.onend = () => { if (speechSession === session) speakAt(session, index + 1); };
+    utterance.onerror = ev => {
+      if (speechSession !== session) return;
+      const err = ev && ev.error;
+      if (err === 'interrupted' || err === 'canceled' || err === 'cancelled') return;
+      stopSpeech();
+      toast('Listening is not available on this device.');
+    };
+    try {
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      stopSpeech();
+      toast('Listening is not available on this device.');
+    }
+  }
+  function playSpeech(btn, key, parts, opts) {
+    stopSpeech();
+    clearTimeout(speechHoldTimer);
+    speechHold = true;
+    const session = {
+      key: key,
+      btn: btn,
+      parts: parts,
+      verse: 0,
+      b: cur.b,
+      c: cur.c,
+      viewName: view,
+      scrollY: window.scrollY,
+      restoreScroll: !!(opts && opts.restoreScroll),
+      highlight: !!(opts && opts.highlight),
+      readingSnap: JSON.stringify(reading)
+    };
+    speechSession = session;
+    setSpeakingButton(btn, true);
+    armSpeechKeepAlive();
+    // Speak in this tap. iOS will not start speech from a later timer.
+    speakAt(session, 0);
+  }
+  function bindListen(btn, key, getParts, opts) {
+    if (!btn) return;
+    if (!speechSupported()) { btn.hidden = true; return; }
+    btn.hidden = false;
+    btn.onclick = () => {
+      if (speechSession && speechSession.key === key) { stopSpeech(); return; }
+      let parts = [];
+      try { parts = getParts() || []; } catch (e) { parts = []; }
+      parts = parts.filter(p => p && String(p.text || '').trim());
+      if (!parts.length) return;
+      playSpeech(btn, key, parts, opts || {});
+    };
+  }
+  function chapterListenStart() {
+    if (peek && peek.b === cur.b && peek.c === cur.c && peek.v) return peek.v;
+    if (!peek && reading.b === cur.b && reading.c === cur.c && reading.v) return reading.v;
+    return 1;
+  }
+  function bindNowListen() {
+    bindListen($('#nowListen'), 'now', () => {
+      if (!nowSpoken || !nowSpoken.text) return [];
+      return C.passageSpeechParts(nowSpoken.label, nowSpoken.text, '');
+    });
+  }
+  function bindReaderListen() {
+    bindListen($('#readListen'), 'chapter', () => {
+      const bk = BOOKS[cur.b];
+      if (!bk || !bk.chapters[cur.c - 1]) return [];
+      return C.chapterSpeechParts(bk.name, cur.c, bk.chapters[cur.c - 1], chapterListenStart());
+    }, { restoreScroll: true, highlight: true });
+  }
+  function initSpeech() {
+    if (!speechSupported()) return;
+    try { window.speechSynthesis.getVoices(); } catch (e) { /* voices arrive on the first tap */ }
+    bindNowListen();
+    bindReaderListen();
+  }
+
   // ---------- verse for right now ----------
   // Clock-based. Nothing here is stored, and opening it uses the peek reader,
   // so the saved place, daily study, and daily prayer stay where they are.
@@ -303,13 +486,16 @@
     if (!BOOKS.length || !C.verseForNow) return;
     const now = new Date();
     const picked = C.verseForNow(now, null, studyRefNow());
+    bindNowListen();
     if (!picked || picked.slot === nowSlotShown) return;
+    if (speechSession && speechSession.key === 'now') stopSpeech();
     const r = C.resolveRef(BOOKS, picked.ref);
     nowSlotShown = picked.slot;
     const note = $('#nowNote'), text = $('#nowText'), ref = $('#nowRef');
     if (note) note.textContent = nextVerseNote(now, picked.nextAt);
     if (text) text.textContent = r ? r.text : '';
     if (ref) ref.textContent = r ? r.label : picked.ref;
+    nowSpoken = r ? { label: r.label, text: r.text } : null;
     const copy = $('#nowCopy'), open = $('#nowOpen');
     if (copy) copy.onclick = () => r && copyText(quote(r.text, r.label));
     if (open) open.onclick = () => r && openPeek(r.b, r.c, r.v, 'now');
@@ -398,6 +584,13 @@
       html.push('<span class="' + cls.join(' ') + '" id="v' + v + '" data-v="' + v + '"><sup>' + v + '</sup>' + esc(t) + '</span>');
     });
     $('#chapter').innerHTML = html.join('');
+    if (speechSession && speechSession.key === 'chapter') {
+      if (speechSession.b !== cur.b || speechSession.c !== cur.c) stopSpeech();
+      else if (speechSession.verse) {
+        const el = document.getElementById('v' + speechSession.verse);
+        if (el) el.classList.add('speak');
+      }
+    }
     const atStart = cur.b === 0 && cur.c === 1, atEnd = cur.b === BOOKS.length - 1 && cur.c === bk.chapters.length;
     ['#prevCh', '#prevCh2'].forEach(s => $(s).disabled = atStart);
     ['#nextCh', '#nextCh2'].forEach(s => $(s).disabled = atEnd);
@@ -703,6 +896,7 @@
     const blob = (r ? quote(r.text, r.label) + '\n\n' : '') + day.study.message;
     $('#stCopy').onclick = () => copyText(blob);
     $('#stShare').onclick = () => shareText(blob);
+    bindListen($('#stListen'), 'study', () => C.passageSpeechParts(r ? r.label : day.study.ref, r ? r.text : '', day.study.message));
   }
   function renderPrayer() {
     const day = todayEntry();
@@ -717,6 +911,7 @@
     const blob = (r ? r.label + ' (KJV)\n"' + r.text + '"\n\n' : '') + day.prayer;
     $('#prCopy').onclick = () => copyText(blob);
     $('#prShare').onclick = () => shareText(blob);
+    bindListen($('#prListen'), 'prayer', () => C.passageSpeechParts(r ? r.label : day.study.ref, r ? r.text : '', day.prayer));
   }
 
   function route() {
@@ -733,6 +928,7 @@
 
   // ---------- start ----------
   applyTheme(); applyFont();
+  initSpeech();
   loadBible().then(data => {
     BOOKS = data.books; NAMES = BOOKS.map(b => b.name);
     clampReading();
@@ -748,18 +944,20 @@
   });
 
   window.addEventListener('scroll', () => {
-    if (ignoreScroll || view !== 'read' || peek) return;
+    if (speechHold || ignoreScroll || view !== 'read' || peek) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      if (!ignoreScroll && view === 'read' && !peek) capturePlace();
+      if (speechHold || ignoreScroll || view !== 'read' || peek) return;
+      capturePlace();
     }, 200);
   }, { passive: true });
   function persistReading() {
-    if (view === 'read' && !peek && !ignoreScroll) capturePlace();
+    if (speechHold || view !== 'read' || peek || ignoreScroll) return;
+    capturePlace();
   }
-  window.addEventListener('pagehide', persistReading);
+  window.addEventListener('pagehide', () => { stopSpeech(); persistReading(); });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') persistReading();
+    if (document.visibilityState === 'hidden') { stopSpeech(); persistReading(); }
     else if (BOOKS.length) { nowSlotShown = null; watchNowVerse(); }
   });
 

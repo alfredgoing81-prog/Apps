@@ -56,7 +56,9 @@ nav.tabs button{flex:1;min-height:62px;border:0;border-radius:0;background:none;
 nav.tabs button svg{width:24px;height:24px}
 nav.tabs button.on{color:var(--accent2)}
 /* reader */
+.readtop{position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:2px}
 .rbar{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;gap:8px;align-items:center;padding:8px 0;margin:-4px 0 8px}
+.readtop .rbar{position:static;top:auto}
 .rbar .pick{flex:1;font-size:18px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chapter{font-family:Georgia,"Times New Roman",serif;font-size:var(--font);line-height:1.65;padding:4px 2px}
 .chapter h2{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:6px 0 14px;text-align:center}
@@ -67,6 +69,9 @@ nav.tabs button.on{color:var(--accent2)}
 .vs.note sup{text-decoration:underline}
 .chapter-pad{height:calc(100vh - 150px)}
 .vs.flash{animation:flash 1.6s ease-out}
+.vs.speak{box-shadow:inset 3px 0 0 var(--accent);background:rgba(212,175,55,.22)}
+button.is-speaking{background:var(--accent);color:var(--onaccent);border-color:var(--accent)}
+#readListen{width:100%;margin:0 0 10px}
 @keyframes flash{0%{box-shadow:inset 0 0 0 2px var(--accent)}100%{box-shadow:inset 0 0 0 2px transparent}}
 .rnav{display:flex;gap:10px;margin:18px 0 6px}.rnav button{flex:1}
 /* pickers */
@@ -138,6 +143,7 @@ dialog h3{margin:0 0 12px;font-size:19px}
       <div class="dv-text serif" id="nowText"></div>
       <div class="dv-ref" id="nowRef"></div>
       <div class="btns grow">
+        <button type="button" id="nowListen" data-label="Listen" hidden>Listen</button>
         <button id="nowCopy">Copy</button>
         <button class="primary" id="nowOpen">Read in context</button>
       </div>
@@ -174,12 +180,15 @@ dialog h3{margin:0 0 12px;font-size:19px}
 
   <!-- READER -->
   <section class="view" id="v-read">
+    <div class="readtop">
     <div class="rbar">
       <button class="icon" id="prevCh" aria-label="Previous chapter">‹</button>
       <button class="pick" id="pickBtn"></button>
       <button class="icon" id="nextCh" aria-label="Next chapter">›</button>
       <button class="icon" id="fontDown" aria-label="Smaller text">A−</button>
       <button class="icon" id="fontUp" aria-label="Larger text">A+</button>
+    </div>
+    <button type="button" id="readListen" data-label="Listen to this chapter" hidden>Listen to this chapter</button>
     </div>
     <div id="peekBar" class="peekbar">
       <div class="small" id="peekMsg"></div>
@@ -200,7 +209,8 @@ dialog h3{margin:0 0 12px;font-size:19px}
       <div class="dv-text serif" id="stText"></div>
       <h2>For today</h2>
       <div class="devotional" id="stBody"></div>
-      <button class="primary" id="stContext" style="width:100%">Read in context</button>
+      <button type="button" id="stListen" data-label="Listen" hidden style="width:100%;margin-top:4px">Listen</button>
+      <button class="primary" id="stContext" style="width:100%;margin-top:10px">Read in context</button>
       <div class="btns grow">
         <button id="stPrayer">Today's prayer</button>
         <button id="stCopy">Copy</button>
@@ -220,7 +230,8 @@ dialog h3{margin:0 0 12px;font-size:19px}
       <div class="serif" id="prVerse" style="margin:8px 0 4px;line-height:1.5"></div>
       <h2>Prayer</h2>
       <div class="prayer-text" id="prBody"></div>
-      <button class="primary" id="prContext" style="width:100%">Read in context</button>
+      <button type="button" id="prListen" data-label="Listen" hidden style="width:100%;margin-top:4px">Listen</button>
+      <button class="primary" id="prContext" style="width:100%;margin-top:10px">Read in context</button>
       <div class="btns grow">
         <button id="prStudy">Today's study</button>
         <button id="prCopy">Copy</button>
@@ -276,14 +287,14 @@ dialog h3{margin:0 0 12px;font-size:19px}
     </div>
     <div class="card">
       <h2>Backup &amp; move between devices</h2>
-      <p class="small" style="margin-top:0">Your bookmarks, highlights, journal and plan progress are saved only on this device. Export a backup file, then import it on your phone or PC. Your reading place is saved separately on this device. The verse for right now, daily verse, study, prayer, plan, and journal do not move it.</p>
+      <p class="small" style="margin-top:0">Your bookmarks, highlights, journal and plan progress are saved only on this device. Export a backup file, then import it on your phone or PC. Your reading place is saved separately on this device. The verse for right now, daily verse, study, prayer, plan, journal, and listening do not move it.</p>
       <div class="btns grow"><button class="primary" id="exportBtn">Export backup</button><button id="importBtn">Import backup</button></div>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
       <div class="small" id="dataSummary" style="margin-top:10px"></div>
     </div>
     <div class="card">
       <h2>About</h2>
-      <p class="small" style="margin:0">King James Version (public domain). Text from github.com/aruljohn/Bible-kjv. Works offline once installed. No accounts, no tracking: nothing leaves this device.</p>
+      <p class="small" style="margin:0">King James Version (public domain). Text from github.com/aruljohn/Bible-kjv. Works offline once installed. Listen uses this phone’s own voice and stays on the device. No accounts, no tracking: nothing leaves this device.</p>
       <div class="btns"><button class="danger" id="resetBtn">Erase all my data</button></div>
     </div>
   </section>

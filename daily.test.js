@@ -91,3 +91,35 @@ test('verse for right now follows 90-minute local slots and skips today\'s study
   assert.equal(after.prayer, before.prayer);
   assert.equal(C.dailyVerseRef(slotStart), C.DAILY_VERSES[((day % C.DAILY_VERSES.length) + C.DAILY_VERSES.length) % C.DAILY_VERSES.length]);
 });
+
+test('spoken passages use a clear english voice and start at the current verse', () => {
+  const voices = [
+    { name: 'Amelie', lang: 'fr-FR', localService: true },
+    { name: 'Google US English', lang: 'en-US', localService: false },
+    { name: 'Samantha', lang: 'en-US', localService: true },
+    { name: 'Daniel', lang: 'en-GB', localService: true }
+  ];
+  assert.equal(C.pickEnglishVoice(voices).name, 'Samantha');
+  assert.equal(C.pickEnglishVoice([{ name: 'Daniel', lang: 'en-GB', localService: true }]).name, 'Daniel');
+  assert.equal(C.pickEnglishVoice([]), null);
+  assert.equal(C.pickEnglishVoice([{ name: 'Amelie', lang: 'fr-FR', localService: true }]), null);
+  assert.equal(C.SPEECH_RATE, 0.92);
+
+  const chapter = C.chapterSpeechParts('Psalms', 23, ['The LORD is my shepherd.', 'He leadeth me.', 'He restoreth my soul.'], 2);
+  assert.equal(chapter[0].text, 'Psalms chapter 23.');
+  assert.equal(chapter[0].verse, 0);
+  assert.ok(chapter.some(p => p.verse === 2 && p.text.indexOf('leadeth') >= 0));
+  assert.ok(chapter.some(p => p.verse === 3));
+  assert.equal(chapter.some(p => p.verse === 1), false);
+
+  const study = C.passageSpeechParts('John 14:6', 'I am the way, the truth, and the life.', 'Follow him in an ordinary choice today.');
+  assert.ok(study[0].text.indexOf('John chapter 14, verse 6') === 0);
+  assert.ok(study.some(p => p.text.indexOf('the way') >= 0));
+  assert.ok(study.some(p => p.text.indexOf('ordinary choice') >= 0));
+  assert.equal(C.speakRef('Numbers 6:24-26'), 'Numbers chapter 6, verses 24 to 26');
+
+  const pieces = C.speechPieces('Alpha. ' + 'word '.repeat(80), 220);
+  assert.ok(pieces.length > 1);
+  assert.ok(pieces.every(p => p.length <= 220));
+  assert.equal(C.speechPieces('   ').length, 0);
+});
