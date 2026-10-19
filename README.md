@@ -1,6 +1,6 @@
 # Bible
 
-Free, offline Bible app (KJV) with a verse that changes every 90 minutes, a daily verse, a daily study, a daily prayer, reading plans, and a prayer journal. It remembers the exact place you were reading. No ads, no accounts.
+Free, offline Bible app (KJV) with a verse that changes every 90 minutes, a daily verse, a daily study, a daily prayer, reading plans, and a prayer journal. Listen reads the current verse, study, prayer, or chapter aloud on phones that have a voice. It remembers the exact place you were reading. No ads, no accounts.
 
 Open it here: [https://alfredgoing81-prog.github.io/Apps/](https://alfredgoing81-prog.github.io/Apps/)
 
@@ -22,7 +22,7 @@ After the first visit the Bible text is saved on your device, so you can keep re
 
 ## Your data stays on your device
 
-Bookmarks, highlights, reading-plan progress, and prayer-journal entries are stored only on your device. Your reading place is stored separately, so opening the verse for right now, daily verse, study, prayer, plan, or journal does not move it. Nothing is sent to a server, and there is no account to create.
+Bookmarks, highlights, reading-plan progress, and prayer-journal entries are stored only on your device. Your reading place is stored separately, so opening the verse for right now, daily verse, study, prayer, plan, or journal does not move it. Listening does not move it either. Nothing is sent to a server, and there is no account to create.
 
 ## Scripture text
 
