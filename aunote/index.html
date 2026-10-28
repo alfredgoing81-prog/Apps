@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AuNote: Gold Note Tracker for Android</title>
+<meta name="description" content="AuNote is an Android app for keeping track of the gold notes you own. Log your Goldbacks, scan serial numbers, and see your collection's value. Everything stays on your phone." />
+<meta property="og:title" content="AuNote: Gold Note Tracker for Android" />
+<meta property="og:description" content="Log your Goldbacks, scan serial numbers, and see your collection's value. No account, no ads. Everything stays on your phone." />
+<meta property="og:image" content="img/summary.jpg" />
+<meta name="theme-color" content="#0f1210" />
+<link rel="icon" href="img/icon.png" />
+<style>
+  :root {
+    --bg: #0f1210; --card: #1a211c; --ink: #e8efe6; --muted: #9aa89a;
+    --gold: #d4af37; --gold-ink: #1a1404; --line: #2c362f;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; color: var(--ink); line-height: 1.55;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(1200px 700px at 15% -10%, #243026, var(--bg)) var(--bg);
+  }
+  a { color: var(--gold); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; padding: 18px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font-weight: 800; font-size: 1.2rem; }
+  .brand img { width: 36px; height: 36px; border-radius: 9px; }
+  nav a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: .95rem; }
+  nav a:hover { color: var(--ink); }
+
+  .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center; padding: 40px 0 56px; }
+  .hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.1; margin: 0 0 16px; }
+  .hero h1 span { color: var(--gold); }
+  .lede { color: var(--muted); font-size: 1.15rem; margin: 0 0 26px; max-width: 34em; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-block; padding: 13px 22px; border-radius: 10px; font-weight: 700; text-decoration: none; }
+  .btn.primary { background: var(--gold); color: var(--gold-ink); }
+  .btn.ghost { border: 1px solid var(--line); color: var(--ink); }
+  .small { color: var(--muted); font-size: .9rem; margin-top: 14px; }
+  .phones { display: flex; gap: 16px; justify-content: center; }
+  .phone { width: 46%; max-width: 230px; border-radius: 22px; border: 6px solid #0a0c0b; box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+  .phone:nth-child(2) { margin-top: 48px; }
+
+  section { padding: 48px 0; }
+  h2 { font-size: 1.7rem; margin: 0 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 26px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 1.05rem; }
+  .card p { margin: 0; color: var(--muted); }
+  .icon { font-size: 1.5rem; margin-bottom: 8px; }
+
+  .steps { counter-reset: step; display: grid; gap: 12px; padding: 0; list-style: none; margin: 0; }
+  .steps li { counter-increment: step; display: flex; gap: 14px; align-items: flex-start; }
+  .steps li::before {
+    content: counter(step); flex: none; width: 30px; height: 30px; border-radius: 50%;
+    background: var(--gold); color: var(--gold-ink); font-weight: 800; display: grid; place-items: center;
+  }
+  .note { border-left: 3px solid var(--gold); padding: 4px 0 4px 14px; color: var(--muted); margin-top: 18px; }
+
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; margin-bottom: 10px; }
+  summary { cursor: pointer; font-weight: 700; }
+  details p { color: var(--muted); margin: 10px 0 0; }
+
+  .cta { text-align: center; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 40px 24px; }
+  .cta p { color: var(--muted); max-width: 34em; margin: 0 auto 22px; }
+
+  footer { padding: 36px 0 48px; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); margin-top: 40px; }
+  footer p { margin: 0 0 8px; }
+
+  @media (max-width: 760px) {
+    nav { display: none; }
+    .hero { grid-template-columns: 1fr; padding-top: 16px; gap: 32px; }
+    .phone:nth-child(2) { margin-top: 32px; }
+    section { padding: 36px 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#"><img src="img/icon.png" alt="" /> AuNote</a>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#scanning">Scanning</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <div>
+      <h1>Your gold note collection, <span>in your pocket.</span></h1>
+      <p class="lede">AuNote is an Android app for keeping track of the Goldbacks you own. Log every note, scan serial numbers with your camera, and see what your collection is worth today.</p>
+      <div class="buttons">
+        <a class="btn primary" href="#testers">Become a tester</a>
+        <a class="btn ghost" href="#features">See what it does</a>
+      </div>
+      <p class="small">Coming soon to Google Play · One-time purchase · No ads, no subscription</p>
+    </div>
+    <div class="phones">
+      <img class="phone" src="img/summary.jpg" alt="AuNote summary screen showing face value, gold content, value at the Goldback rate, gold value, cost basis and profit" />
+      <img class="phone" src="img/collection.jpg" alt="AuNote collection list showing notes from New Hampshire, Nevada, Oklahoma, Arizona and Idaho" />
+    </div>
+  </div>
+
+  <section id="features">
+    <h2>Everything a collector needs</h2>
+    <p class="sub">Built by a Goldback collector, for Goldback collectors.</p>
+    <div class="grid">
+      <div class="card"><div class="icon">📋</div><h3>Log every note</h3><p>State series, denomination, year, variant, quantity, price paid, serial number and your own notes.</p></div>
+      <div class="card"><div class="icon">📷</div><h3>Scan to fill in</h3><p>Take a picture, or pick one from your gallery, and AuNote reads what it can, like the serial number.</p></div>
+      <div class="card"><div class="icon">💰</div><h3>Know what it's worth</h3><p>Value at the Goldback rate, the gold inside at today's live spot price, the premium over gold, and your profit or loss.</p></div>
+      <div class="card"><div class="icon">✏️</div><h3>Easy to fix</h3><p>Tap any note to edit it. It warns you about duplicate serial numbers, so nothing gets logged twice.</p></div>
+      <div class="card"><div class="icon">🌎</div><h3>Your currency</h3><p>US, Canadian and Australian dollars, British pounds or euros, with the live gold price in each.</p></div>
+      <div class="card"><div class="icon">📤</div><h3>Back it up</h3><p>Export your collection to a spreadsheet file anytime, and import it again on a new phone.</p></div>
+    </div>
+  </section>
+
+  <section id="scanning">
+    <h2>How scanning works</h2>
+    <p class="sub">Honest expectations, so there are no surprises.</p>
+    <ol class="steps">
+      <li><div><strong>Tap Scan a note</strong> and take a picture, or choose one you already took.</div></li>
+      <li><div><strong>AuNote reads the picture on your phone</strong>, turning it sideways too, since serial numbers run up the edge of the note.</div></li>
+      <li><div><strong>The boxes it read are outlined in gold.</strong> Check them, type in anything it missed, and tap Add.</div></li>
+    </ol>
+    <p class="note">Shiny gold foil and fancy lettering are hard to read, so the scan often fills in just the serial number. A flat note, without glare, works best, and the serial is the part that matters most for spotting duplicates.</p>
+  </section>
+
+  <section id="privacy">
+    <h2>Your collection stays yours</h2>
+    <p class="sub">No account. No ads. No tracking.</p>
+    <div class="grid">
+      <div class="card"><div class="icon">🔒</div><h3>Stored on your phone</h3><p>Your notes, serial numbers and prices never leave your device. We can't see them.</p></div>
+      <div class="card"><div class="icon">📵</div><h3>Photos aren't uploaded</h3><p>Pictures are read on your phone and aren't saved or sent anywhere.</p></div>
+      <div class="card"><div class="icon">🌐</div><h3>Online only for gold prices</h3><p>The app only goes online to download the current gold price. Nothing about you is sent.</p></div>
+    </div>
+    <p class="small">Read the full <a href="https://alfredgoing81-prog.github.io/Apps/aunote-privacy.html">privacy policy</a>.</p>
+  </section>
+
+  <section id="faq">
+    <h2>Questions</h2>
+    <details><summary>Does AuNote work offline?</summary><p>Yes. Your collection, scanning and totals all work without internet. The gold price updates whenever you're online, and keeps the last price when you're not.</p></details>
+    <details><summary>Where does the Goldback rate come from?</summary><p>You type it in. Goldback, Inc. publishes the daily rate on goldback.com, and AuNote has a link straight to that page.</p></details>
+    <details><summary>Is there an iPhone version?</summary><p>Not yet. AuNote is launching on Android first.</p></details>
+    <details><summary>Where can I spend Goldbacks?</summary><p>AuNote links to Goldback's own lists of places that use and exchange Goldbacks. They're a voluntary currency, so always ask a business before you pay.</p></details>
+    <details><summary>Is AuNote made by Goldback, Inc.?</summary><p>No. AuNote is an independent app made by a collector. It isn't affiliated with or endorsed by Goldback, Inc.</p></details>
+  </section>
+
+  <section id="testers">
+    <div class="cta">
+      <h2>Help test AuNote</h2>
+      <p>Before AuNote goes public on Google Play, it needs testers. All you need is an Android phone. Send the Gmail address you use for the Play Store, and you'll get an invite link to install it.</p>
+      <a class="btn primary" href="mailto:alfred.going81@gmail.com?subject=AuNote%20tester&amp;body=Hi!%20I'd%20like%20to%20test%20AuNote.%20My%20Play%20Store%20Gmail%20is%3A%20">Email me to join</a>
+    </div>
+  </section>
+
+  <footer>
+    <p>AuNote by Going Apps · <a href="mailto:alfred.going81@gmail.com">alfred.going81@gmail.com</a> · <a href="https://alfredgoing81-prog.github.io/Apps/aunote-privacy.html">Privacy Policy</a></p>
+    <p>Goldback® is a trademark of Goldback, Inc. AuNote is an independent app and is not affiliated with or endorsed by Goldback, Inc.</p>
+    <p>Google Play is a trademark of Google LLC.</p>
+  </footer>
+</div>
+</body>
+</html>
